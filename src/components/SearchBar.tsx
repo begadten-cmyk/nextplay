@@ -1,5 +1,5 @@
 import { Search, Filter } from 'lucide-react';
-import type { Priority, Label } from '../types';
+import type { Priority, Label, TeamMember } from '../types';
 
 interface SearchBarProps {
   search: string;
@@ -8,7 +8,10 @@ interface SearchBarProps {
   onPriorityFilterChange: (value: Priority | 'all') => void;
   labelFilter: string | 'all';
   onLabelFilterChange: (value: string | 'all') => void;
+  assigneeFilter: string | 'all';
+  onAssigneeFilterChange: (value: string | 'all') => void;
   labels: Label[];
+  members: TeamMember[];
 }
 
 export function SearchBar({
@@ -18,7 +21,10 @@ export function SearchBar({
   onPriorityFilterChange,
   labelFilter,
   onLabelFilterChange,
+  assigneeFilter,
+  onAssigneeFilterChange,
   labels,
+  members,
 }: SearchBarProps) {
   return (
     <div className="search-bar">
@@ -53,6 +59,18 @@ export function SearchBar({
           {labels.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={assigneeFilter}
+          onChange={(e) => onAssigneeFilterChange(e.target.value)}
+          className="filter-select"
+        >
+          <option value="all">All Assignees</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
             </option>
           ))}
         </select>

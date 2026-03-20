@@ -7,32 +7,40 @@ import {
   Calendar,
   Tag,
   Send,
+  Users,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
-import type { Task, Comment, ActivityLog, Label, Priority } from '../types';
+import type { Task, Comment, ActivityLog, Label, Priority, TeamMember } from '../types';
 import { PRIORITY_CONFIG } from '../types';
+
+function getInitials(name: string): string {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+}
 
 interface TaskDetailPanelProps {
   task: Task;
   labels: Label[];
+  members: TeamMember[];
   onClose: () => void;
-  onDelete: (id: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<{ error: string | null }>;
   onUpdate: (
     id: string,
-    updates: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'due_date'>>
-  ) => Promise<boolean>;
+    updates: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'due_date' | 'assignee_ids'>>
+  ) => Promise<{ error: string | null }>;
   onLogActivity: (taskId: string, action: string) => Promise<void>;
   getComments: (taskId: string) => Promise<Comment[]>;
-  addComment: (taskId: string, content: string) => Promise<Comment | null>;
+  addComment: (taskId: string, content: string) => Promise<{ data: Comment | null; error: string | null }>;
   getActivity: (taskId: string) => Promise<ActivityLog[]>;
-  onAddLabel: (taskId: string, labelId: string) => Promise<boolean>;
-  onRemoveLabel: (taskId: string, labelId: string) => Promise<boolean>;
+  onAddLabel: (taskId: string, labelId: string) => Promise<{ error: string | null }>;
+  onRemoveLabel: (taskId: string, labelId: string) => Promise<{ error: string | null }>;
   onRefetch: () => Promise<void>;
+  onError: (message: string) => void;
 }
 
 export function TaskDetailPanel({
   task,
   labels,
+  members,
   onClose,
   onDelete,
   onUpdate,
@@ -43,6 +51,7 @@ export function TaskDetailPanel({
   onAddLabel,
   onRemoveLabel,
   onRefetch,
+  onError,
 }: TaskDetailPanelProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
@@ -63,6 +72,14 @@ export function TaskDetailPanel({
     (l) => !taskLabels.some((tl) => tl.id === l.id)
   );
 
+  const taskAssignees = (task.assignee_ids ?? [])
+    .map((id) => members.find((m) => m.id === id))
+    .filter(Boolean) as TeamMember[];
+
+  const availableMembers = members.filter(
+    (m) => !(task.assignee_ids ?? []).includes(m.id)
+  );
+
   useEffect(() => {
     loadData();
   }, [task.id]);
@@ -78,7 +95,11 @@ export function TaskDetailPanel({
 
   async function handleAddComment() {
     if (!newComment.trim()) return;
-    const comment = await addComment(task.id, newComment.trim());
+    const { data: comment, error } = await addComment(task.id, newComment.trim());
+    if (error) {
+      onError(error);
+      return;
+    }
     if (comment) {
       setComments((prev) => [...prev, comment]);
       setNewComment('');
@@ -86,8 +107,12 @@ export function TaskDetailPanel({
   }
 
   async function handleDelete() {
-    const success = await onDelete(task.id);
-    if (success) onClose();
+    const { error } = await onDelete(task.id);
+    if (error) {
+      onError(error);
+      return;
+    }
+    onClose();
   }
 
   async function handleSave() {
@@ -98,12 +123,17 @@ export function TaskDetailPanel({
       changes.push(`Changed priority to ${PRIORITY_CONFIG[editPriority].label}`);
     if (editDueDate !== (task.due_date ?? '')) changes.push('Updated due date');
 
-    await onUpdate(task.id, {
+    const { error } = await onUpdate(task.id, {
       title: editTitle,
       description: editDesc || undefined,
       priority: editPriority as Priority,
       due_date: editDueDate || undefined,
     });
+
+    if (error) {
+      onError(error);
+      return;
+    }
 
     for (const change of changes) {
       await onLogActivity(task.id, change);
@@ -115,11 +145,36 @@ export function TaskDetailPanel({
 
   async function handleToggleLabel(labelId: string, isAttached: boolean) {
     if (isAttached) {
-      await onRemoveLabel(task.id, labelId);
+      const { error } = await onRemoveLabel(task.id, labelId);
+      if (error) onError(error);
     } else {
-      await onAddLabel(task.id, labelId);
+      const { error } = await onAddLabel(task.id, labelId);
+      if (error) onError(error);
     }
     await onRefetch();
+  }
+
+  async function handleToggleAssignee(memberId: string, isAssigned: boolean) {
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return;
+
+    const currentIds = task.assignee_ids ?? [];
+    const newIds = isAssigned
+      ? currentIds.filter((id) => id !== memberId)
+      : [...currentIds, memberId];
+
+    const { error } = await onUpdate(task.id, { assignee_ids: newIds });
+    if (error) {
+      onError(error);
+      return;
+    }
+
+    const action = isAssigned
+      ? `Removed ${member.name} from assignees`
+      : `Assigned ${member.name}`;
+    await onLogActivity(task.id, action);
+    await onRefetch();
+    loadData();
   }
 
   return (
@@ -230,6 +285,46 @@ export function TaskDetailPanel({
                 </div>
               </div>
 
+              {/* Assignees section */}
+              <div className="task-labels-section">
+                <div className="meta-label-header">
+                  <Users size={14} />
+                  <span>Assignees</span>
+                </div>
+                <div className="assignee-selector">
+                  {taskAssignees.map((m) => (
+                    <button
+                      key={m.id}
+                      className="assignee-pick assignee-pick-active"
+                      onClick={() => handleToggleAssignee(m.id, true)}
+                      title={`Click to unassign ${m.name}`}
+                    >
+                      <span className="assignee-avatar-pick" style={{ backgroundColor: m.color }}>
+                        {getInitials(m.name)}
+                      </span>
+                      <span className="assignee-pick-name">{m.name} ×</span>
+                    </button>
+                  ))}
+                  {availableMembers.map((m) => (
+                    <button
+                      key={m.id}
+                      className="assignee-pick"
+                      onClick={() => handleToggleAssignee(m.id, false)}
+                      title={`Click to assign ${m.name}`}
+                    >
+                      <span className="assignee-avatar-pick" style={{ backgroundColor: m.color, opacity: 0.5 }}>
+                        {getInitials(m.name)}
+                      </span>
+                      <span className="assignee-pick-name">{m.name}</span>
+                    </button>
+                  ))}
+                  {members.length === 0 && (
+                    <span className="empty-text-inline">No team members created yet</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Labels section */}
               <div className="task-labels-section">
                 <div className="meta-label-header">
                   <Tag size={14} />

@@ -2,18 +2,19 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Inbox } from 'lucide-react';
 import { TaskCard } from './TaskCard';
-import type { Task, Status, Label } from '../types';
+import type { Task, Status, Label, TeamMember } from '../types';
 
 interface ColumnProps {
   id: Status;
   title: string;
   tasks: Task[];
   labels: Label[];
+  members: TeamMember[];
   isOver: boolean;
   onTaskClick: (task: Task) => void;
 }
 
-export function Column({ id, title, tasks, labels, isOver, onTaskClick }: ColumnProps) {
+export function Column({ id, title, tasks, labels, members, isOver, onTaskClick }: ColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
   return (
@@ -39,6 +40,7 @@ export function Column({ id, title, tasks, labels, isOver, onTaskClick }: Column
                 key={task.id}
                 task={task}
                 labels={labels}
+                members={members}
                 onClick={() => onTaskClick(task)}
               />
             ))

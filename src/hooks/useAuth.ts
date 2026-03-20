@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function initAuth() {
@@ -16,9 +17,9 @@ export function useAuth() {
         return;
       }
 
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error) {
-        console.error('Anonymous sign-in failed:', error);
+      const { data, error: authError } = await supabase.auth.signInAnonymously();
+      if (authError) {
+        setError(`Authentication failed: ${authError.message}`);
       } else {
         setUser(data.user);
       }
@@ -34,5 +35,5 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  return { user, loading };
+  return { user, loading, error };
 }

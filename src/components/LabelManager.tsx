@@ -4,16 +4,17 @@ import type { Label } from '../types';
 
 interface LabelManagerProps {
   labels: Label[];
-  onCreateLabel: (name: string, color: string) => Promise<Label | null>;
-  onDeleteLabel: (id: string) => Promise<boolean>;
+  onCreateLabel: (name: string, color: string) => Promise<{ data: Label | null; error: string | null }>;
+  onDeleteLabel: (id: string) => Promise<{ error: string | null }>;
+  onError: (message: string) => void;
 }
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
-  '#6366f1', '#a855f7', '#ec4899', '#64748b',
+  '#1e3a8a', '#a855f7', '#ec4899', '#64748b',
 ];
 
-export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelManagerProps) {
+export function LabelManager({ labels, onCreateLabel, onDeleteLabel, onError }: LabelManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
@@ -21,9 +22,18 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await onCreateLabel(name.trim(), color);
+    const { error } = await onCreateLabel(name.trim(), color);
+    if (error) {
+      onError(error);
+      return;
+    }
     setName('');
     setColor(PRESET_COLORS[0]);
+  }
+
+  async function handleDelete(id: string) {
+    const { error } = await onDeleteLabel(id);
+    if (error) onError(error);
   }
 
   return (
@@ -71,7 +81,7 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
               <div key={l.id} className="label-list-item">
                 <span className="label-dot" style={{ backgroundColor: l.color }} />
                 <span className="label-name">{l.name}</span>
-                <button className="btn-icon btn-xs" onClick={() => onDeleteLabel(l.id)}>
+                <button className="btn-icon btn-xs" onClick={() => handleDelete(l.id)}>
                   <X size={12} />
                 </button>
               </div>

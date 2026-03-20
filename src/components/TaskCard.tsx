@@ -2,12 +2,13 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Calendar, AlertCircle } from 'lucide-react';
 import { format, differenceInDays, isAfter, startOfDay } from 'date-fns';
-import type { Task, Label } from '../types';
+import type { Task, Label, TeamMember } from '../types';
 import { PRIORITY_CONFIG } from '../types';
 
 interface TaskCardProps {
   task: Task;
   labels: Label[];
+  members: TeamMember[];
   onClick: () => void;
 }
 
@@ -27,7 +28,16 @@ function getDueBadge(dueDate: string | null, status: string) {
   return <span className="due-badge due-ok">Due {format(due, 'MMM d')}</span>;
 }
 
-export function TaskCard({ task, labels, onClick }: TaskCardProps) {
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+export function TaskCard({ task, labels, members, onClick }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -50,7 +60,13 @@ export function TaskCard({ task, labels, onClick }: TaskCardProps) {
     })
     .filter(Boolean) as Label[];
 
+  const assignees = (task.assignee_ids ?? [])
+    .map((id) => members.find((m) => m.id === id))
+    .filter(Boolean) as TeamMember[];
+
   const priorityConfig = PRIORITY_CONFIG[task.priority];
+  const visibleAssignees = assignees.slice(0, 3);
+  const overflowCount = assignees.length - 3;
 
   return (
     <div
@@ -92,14 +108,35 @@ export function TaskCard({ task, labels, onClick }: TaskCardProps) {
             ))}
           </div>
         )}
-        <div className="task-card-meta">
-          {task.due_date && (
-            <span className="task-date">
-              <Calendar size={12} />
-              {format(new Date(task.due_date), 'MMM d')}
-            </span>
+        <div className="task-card-bottom">
+          <div className="task-card-meta">
+            {task.due_date && (
+              <span className="task-date">
+                <Calendar size={12} />
+                {format(new Date(task.due_date), 'MMM d')}
+              </span>
+            )}
+            {getDueBadge(task.due_date, task.status)}
+          </div>
+          {assignees.length > 0 && (
+            <div className="assignee-avatars">
+              {visibleAssignees.map((m) => (
+                <span
+                  key={m.id}
+                  className="assignee-avatar"
+                  style={{ backgroundColor: m.color }}
+                  title={m.name}
+                >
+                  {getInitials(m.name)}
+                </span>
+              ))}
+              {overflowCount > 0 && (
+                <span className="assignee-avatar assignee-overflow">
+                  +{overflowCount}
+                </span>
+              )}
+            </div>
           )}
-          {getDueBadge(task.due_date, task.status)}
         </div>
       </div>
       {task.priority === 'high' && (

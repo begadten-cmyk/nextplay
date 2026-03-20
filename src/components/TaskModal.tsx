@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import type { Priority, Label, Task } from '../types';
+import type { Priority, Label, Task, TeamMember } from '../types';
 import { PRIORITY_CONFIG } from '../types';
+
+function getInitials(name: string): string {
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+}
 
 interface TaskModalProps {
   onClose: () => void;
@@ -10,18 +14,22 @@ interface TaskModalProps {
     description?: string;
     priority: Priority;
     due_date?: string | null;
-  }) => Promise<Task | null>;
+    assignee_ids?: string[];
+  }) => Promise<{ data: Task | null; error: string | null }>;
   labels: Label[];
-  onAddLabel: (taskId: string, labelId: string) => Promise<boolean>;
+  members: TeamMember[];
+  onAddLabel: (taskId: string, labelId: string) => Promise<{ error: string | null }>;
   onRefetch: () => Promise<void>;
+  onError: (message: string) => void;
 }
 
-export function TaskModal({ onClose, onSubmit, labels, onAddLabel, onRefetch }: TaskModalProps) {
+export function TaskModal({ onClose, onSubmit, labels, members, onAddLabel, onRefetch, onError }: TaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
   const [dueDate, setDueDate] = useState('');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,16 +37,26 @@ export function TaskModal({ onClose, onSubmit, labels, onAddLabel, onRefetch }: 
     if (!title.trim()) return;
 
     setSubmitting(true);
-    const task = await onSubmit({
+    const { data: task, error } = await onSubmit({
       title: title.trim(),
       description: description.trim() || undefined,
       priority,
       due_date: dueDate || null,
+      assignee_ids: selectedAssignees,
     });
+
+    if (error) {
+      onError(error);
+      setSubmitting(false);
+      return;
+    }
 
     if (task) {
       for (const labelId of selectedLabels) {
-        await onAddLabel(task.id, labelId);
+        const result = await onAddLabel(task.id, labelId);
+        if (result.error) {
+          onError(result.error);
+        }
       }
       if (selectedLabels.length > 0) {
         await onRefetch();
@@ -51,6 +69,12 @@ export function TaskModal({ onClose, onSubmit, labels, onAddLabel, onRefetch }: 
   const toggleLabel = (id: string) => {
     setSelectedLabels((prev) =>
       prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAssignee = (id: string) => {
+    setSelectedAssignees((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
   };
 
@@ -117,6 +141,29 @@ export function TaskModal({ onClose, onSubmit, labels, onAddLabel, onRefetch }: 
               />
             </div>
           </div>
+          {members.length > 0 && (
+            <div className="form-group">
+              <label>Assignees</label>
+              <div className="assignee-selector">
+                {members.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`assignee-pick ${selectedAssignees.includes(m.id) ? 'assignee-pick-active' : ''}`}
+                    onClick={() => toggleAssignee(m.id)}
+                  >
+                    <span
+                      className="assignee-avatar-pick"
+                      style={{ backgroundColor: m.color }}
+                    >
+                      {getInitials(m.name)}
+                    </span>
+                    <span className="assignee-pick-name">{m.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {labels.length > 0 && (
             <div className="form-group">
               <label>Labels</label>

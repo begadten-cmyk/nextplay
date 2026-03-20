@@ -5,10 +5,12 @@ import type { Task, Status, Priority, ActivityLog, Comment } from '../types';
 export function useTasks(userId: string | undefined) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
+    setFetchError(null);
     const { data, error } = await supabase
       .from('tasks')
       .select('*, task_labels(task_id, label_id, label:labels(*))')
@@ -16,7 +18,7 @@ export function useTasks(userId: string | undefined) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching tasks:', error);
+      setFetchError(`Failed to load tasks: ${error.message}`);
     } else {
       setTasks(data ?? []);
     }
@@ -33,46 +35,46 @@ export function useTasks(userId: string | undefined) {
     priority: Priority;
     due_date?: string | null;
     status?: Status;
-  }) => {
-    if (!userId) return null;
+    assignee_ids?: string[];
+  }): Promise<{ data: Task | null; error: string | null }> => {
+    if (!userId) return { data: null, error: 'Not authenticated' };
     const { data, error } = await supabase
       .from('tasks')
       .insert({
         ...task,
         user_id: userId,
         status: task.status ?? 'todo',
+        assignee_ids: task.assignee_ids ?? [],
       })
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating task:', error);
-      return null;
+      return { data: null, error: `Failed to create task: ${error.message}` };
     }
 
     await logActivity(data.id, 'Created this task');
     await fetchTasks();
-    return data;
+    return { data, error: null };
   };
 
   const updateTask = async (
     id: string,
-    updates: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'due_date' | 'status'>>
-  ) => {
+    updates: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'due_date' | 'status' | 'assignee_ids'>>
+  ): Promise<{ error: string | null }> => {
     const { error } = await supabase
       .from('tasks')
       .update(updates)
       .eq('id', id);
 
     if (error) {
-      console.error('Error updating task:', error);
-      return false;
+      return { error: `Failed to update task: ${error.message}` };
     }
     await fetchTasks();
-    return true;
+    return { error: null };
   };
 
-  const moveTask = async (id: string, newStatus: Status) => {
+  const moveTask = async (id: string, newStatus: Status): Promise<{ error: string | null }> => {
     const statusLabels: Record<Status, string> = {
       todo: 'To Do',
       in_progress: 'In Progress',
@@ -80,21 +82,20 @@ export function useTasks(userId: string | undefined) {
       done: 'Done',
     };
 
-    const success = await updateTask(id, { status: newStatus });
-    if (success) {
+    const result = await updateTask(id, { status: newStatus });
+    if (!result.error) {
       await logActivity(id, `Moved to ${statusLabels[newStatus]}`);
     }
-    return success;
+    return result;
   };
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = async (id: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) {
-      console.error('Error deleting task:', error);
-      return false;
+      return { error: `Failed to delete task: ${error.message}` };
     }
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    return true;
+    return { error: null };
   };
 
   const logActivity = async (taskId: string, action: string) => {
@@ -114,7 +115,6 @@ export function useTasks(userId: string | undefined) {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching activity:', error);
       return [];
     }
     return data ?? [];
@@ -128,14 +128,13 @@ export function useTasks(userId: string | undefined) {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching comments:', error);
       return [];
     }
     return data ?? [];
   };
 
-  const addComment = async (taskId: string, content: string) => {
-    if (!userId) return null;
+  const addComment = async (taskId: string, content: string): Promise<{ data: Comment | null; error: string | null }> => {
+    if (!userId) return { data: null, error: 'Not authenticated' };
     const { data, error } = await supabase
       .from('comments')
       .insert({ task_id: taskId, user_id: userId, content })
@@ -143,15 +142,15 @@ export function useTasks(userId: string | undefined) {
       .single();
 
     if (error) {
-      console.error('Error adding comment:', error);
-      return null;
+      return { data: null, error: `Failed to add comment: ${error.message}` };
     }
-    return data;
+    return { data, error: null };
   };
 
   return {
     tasks,
     loading,
+    fetchError,
     createTask,
     updateTask,
     moveTask,

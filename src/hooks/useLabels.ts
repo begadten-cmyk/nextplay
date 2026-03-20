@@ -24,8 +24,8 @@ export function useLabels(userId: string | undefined) {
     fetchLabels();
   }, [fetchLabels]);
 
-  const createLabel = async (name: string, color: string) => {
-    if (!userId) return null;
+  const createLabel = async (name: string, color: string): Promise<{ data: Label | null; error: string | null }> => {
+    if (!userId) return { data: null, error: 'Not authenticated' };
     const { data, error } = await supabase
       .from('labels')
       .insert({ name, color, user_id: userId })
@@ -33,36 +33,33 @@ export function useLabels(userId: string | undefined) {
       .single();
 
     if (error) {
-      console.error('Error creating label:', error);
-      return null;
+      return { data: null, error: `Failed to create label: ${error.message}` };
     }
     await fetchLabels();
-    return data;
+    return { data, error: null };
   };
 
-  const deleteLabel = async (id: string) => {
+  const deleteLabel = async (id: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.from('labels').delete().eq('id', id);
     if (error) {
-      console.error('Error deleting label:', error);
-      return false;
+      return { error: `Failed to delete label: ${error.message}` };
     }
     await fetchLabels();
-    return true;
+    return { error: null };
   };
 
-  const addLabelToTask = async (taskId: string, labelId: string) => {
+  const addLabelToTask = async (taskId: string, labelId: string): Promise<{ error: string | null }> => {
     const { error } = await supabase
       .from('task_labels')
       .insert({ task_id: taskId, label_id: labelId });
 
     if (error && error.code !== '23505') {
-      console.error('Error adding label to task:', error);
-      return false;
+      return { error: `Failed to add label: ${error.message}` };
     }
-    return true;
+    return { error: null };
   };
 
-  const removeLabelFromTask = async (taskId: string, labelId: string) => {
+  const removeLabelFromTask = async (taskId: string, labelId: string): Promise<{ error: string | null }> => {
     const { error } = await supabase
       .from('task_labels')
       .delete()
@@ -70,10 +67,9 @@ export function useLabels(userId: string | undefined) {
       .eq('label_id', labelId);
 
     if (error) {
-      console.error('Error removing label from task:', error);
-      return false;
+      return { error: `Failed to remove label: ${error.message}` };
     }
-    return true;
+    return { error: null };
   };
 
   return {

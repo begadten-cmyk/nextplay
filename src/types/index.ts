@@ -9,6 +9,7 @@ export interface Task {
   priority: Priority;
   due_date: string | null;
   user_id: string;
+  assignee_ids: string[];
   created_at: string;
   task_labels?: TaskLabel[];
 }
@@ -39,6 +40,14 @@ export interface ActivityLog {
   task_id: string;
   user_id: string;
   action: string;
+  created_at: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  color: string;
+  user_id: string;
   created_at: string;
 }
 

@@ -12,18 +12,21 @@ import {
 } from '@dnd-kit/core';
 import { Column, ColumnSkeleton } from './Column';
 import { TaskCard } from './TaskCard';
-import type { Task, Status, Label } from '../types';
+import type { Task, Status, Label, TeamMember } from '../types';
 import { COLUMNS } from '../types';
 
 interface BoardProps {
   tasks: Task[];
   labels: Label[];
+  members: TeamMember[];
   loading: boolean;
-  onMoveTask: (id: string, status: Status) => Promise<boolean>;
+  fetchError: string | null;
+  onMoveTask: (id: string, status: Status) => Promise<{ error: string | null }>;
   onTaskClick: (task: Task) => void;
+  onError: (message: string) => void;
 }
 
-export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: BoardProps) {
+export function Board({ tasks, labels, members, loading, fetchError, onMoveTask, onTaskClick, onError }: BoardProps) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
 
@@ -42,20 +45,18 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
       setOverColumn(null);
       return;
     }
-    // Check if over a column directly
     const columnId = COLUMNS.find((c) => c.id === overId)?.id;
     if (columnId) {
       setOverColumn(columnId);
       return;
     }
-    // Check if over a task — find which column that task is in
     const overTask = tasks.find((t) => t.id === overId);
     if (overTask) {
       setOverColumn(overTask.status);
     }
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     setActiveTask(null);
     setOverColumn(null);
 
@@ -66,7 +67,6 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
-    // Determine target column
     let targetStatus: Status | null = null;
     const col = COLUMNS.find((c) => c.id === over.id);
     if (col) {
@@ -79,7 +79,8 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
     }
 
     if (targetStatus && targetStatus !== task.status) {
-      onMoveTask(taskId, targetStatus);
+      const { error } = await onMoveTask(taskId, targetStatus);
+      if (error) onError(error);
     }
   }
 
@@ -89,6 +90,17 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
         {COLUMNS.map((col) => (
           <ColumnSkeleton key={col.id} />
         ))}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="board-error">
+        <div className="board-error-content">
+          <p className="board-error-title">Failed to load tasks</p>
+          <p className="board-error-message">{fetchError}</p>
+        </div>
       </div>
     );
   }
@@ -109,6 +121,7 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
             title={col.title}
             tasks={tasks.filter((t) => t.status === col.id)}
             labels={labels}
+            members={members}
             isOver={overColumn === col.id}
             onTaskClick={onTaskClick}
           />
@@ -116,7 +129,7 @@ export function Board({ tasks, labels, loading, onMoveTask, onTaskClick }: Board
       </div>
       <DragOverlay>
         {activeTask ? (
-          <TaskCard task={activeTask} labels={labels} onClick={() => {}} />
+          <TaskCard task={activeTask} labels={labels} members={members} onClick={() => {}} />
         ) : null}
       </DragOverlay>
     </DndContext>
